@@ -13,34 +13,44 @@ public class GameService {
 
     public void generateBoard(Player player) {
         Board board = player.getBoard();
-        int rows = board.getGrid().length;               // número de filas
-        int cols = board.getGrid()[0].length;            // número de columnas (asumiendo todas las filas son iguales)
-        Set<Word> words = player.getWords();
+        Random random = new Random();
 
-        for (Word word : words) {
-            boolean inserted = false;
+        for (Word word : player.getWords()) {
+            String wordText = word.getText();
+            boolean wordPlaced = false;
             int attempts = 0;
-            while (!inserted && attempts < 100) {
-                int row = random.nextInt(rows);
-                int col = random.nextInt(cols - word.getText().length());
-                inserted = board.insertWordHorizontally(word.getText(), row, col);
-                if (inserted) {
-                    word.setCoordinates(row, col, row, col + word.getText().length() - 1);
-                }
+            int maxAttempts = 100;
+
+            while (!wordPlaced && attempts < maxAttempts) {
                 attempts++;
+
+                boolean horizontal = random.nextBoolean();
+
+                if (horizontal) {
+                    int row = random.nextInt(board.getRows());
+                    int col = random.nextInt(board.getCols() - wordText.length() + 1);
+                    wordPlaced = board.insertWordHorizontally(wordText, row, col);
+                } else {
+                    int row = random.nextInt(board.getRows() - wordText.length() + 1);
+                    int col = random.nextInt(board.getCols());
+                    wordPlaced = board.insertWordVertically(wordText, row, col);
+                }
             }
-            if (!inserted) {
-                System.out.println("❌ No se pudo insertar la palabra: " + word.getText());
+
+            if (!wordPlaced) {
+                // Si no se pudo colocar en ninguna dirección, forzar en horizontal
+                int row = random.nextInt(board.getRows());
+                int col = random.nextInt(board.getCols() - wordText.length() + 1);
+                board.insertWordHorizontally(wordText, row, col);
             }
         }
 
         board.fillRemainingWithRandomLetters();
-        player.setBoard(board);
     }
 
     public String getBoardAsString(Board board) {
         board.printBoard();
-        StringBuilder sb = new StringBuilder("🧩 Tu tablero:\n");
+        StringBuilder sb = new StringBuilder();
         for (char[] row : board.getGrid()) {
             for (char c : row) {
                 sb.append(c).append(' ');
@@ -49,4 +59,5 @@ public class GameService {
         }
         return sb.toString();
     }
+
 }
