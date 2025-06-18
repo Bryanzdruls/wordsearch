@@ -66,6 +66,22 @@ public class Board {
         return true;
     }
 
+    public boolean insertWordVertically(String word, int rowStart, int col) {
+        if (rowStart + word.length() > rows) return false;
+
+        for (int i = 0; i < word.length(); i++) {
+            char current = grid[rowStart + i][col];
+            if (current != '\0' && current != word.charAt(i)) {
+                return false;
+            }
+        }
+
+        for (int i = 0; i < word.length(); i++) {
+            grid[rowStart + i][col] = word.charAt(i);
+        }
+        return true;
+    }
+
     public void fillRemainingWithRandomLetters() {
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
