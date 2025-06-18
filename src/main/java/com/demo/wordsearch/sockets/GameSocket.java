@@ -3,19 +3,19 @@ package com.demo.wordsearch.sockets;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.demo.wordsearch.model.Board;
 import com.demo.wordsearch.model.Player;
 import com.demo.wordsearch.model.Word;
 import com.demo.wordsearch.service.GameService;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.websocket.OnClose;
-import jakarta.websocket.OnError;
-import jakarta.websocket.OnMessage;
-import jakarta.websocket.OnOpen;
+import jakarta.websocket.*;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
-import jakarta.websocket.Session;
 
 @ServerEndpoint("/game/{username}")
 @ApplicationScoped
@@ -23,12 +23,14 @@ public class GameSocket {
 
     Map<String, Player> players = new ConcurrentHashMap<>();
     private final GameService gameService = new GameService();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private static final int TIME_LIMIT_MINUTES = 1; // Límite de tiempo en minutos
 
     @OnOpen
-    public void onOpen(Session session, @PathParam("username") String username){
+    public void onOpen(Session session, @PathParam("username") String username) {
         Board board = new Board(20,20);
-        Player player = new Player(username,session,board);
-        players.put(username,player);
+        Player player = new Player(username, session, board);
+        players.put(username, player);
         sendMessage(session, "Bienvenido, " + username + "! Tu tablero ha sido generado.");
         board.printBoard();
     }
@@ -40,10 +42,10 @@ public class GameSocket {
 
         if (player.getExpectedWordCount() == -1) {
             int count = 0;
-            try{
-                 count = Integer.parseInt(message.trim());
-            }catch (NumberFormatException e){
-                throw new RuntimeException("Ups primero debes ingresar el numero de palabras que deseas ingresar vuelve a conectarte e ingresa nuevamente.");
+            try {
+                count = Integer.parseInt(message.trim());
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("Debes ingresar un número válido de palabras.");
             }
 
             if (count < 5 || count > 15) {
@@ -75,19 +77,36 @@ public class GameSocket {
                 sendMessage(player.getSession(), "✅ Palabra #" + current + " recibida. Escribe la palabra #" + (current + 1) + ":");
             } else {
                 sendMessage(player.getSession(), "✅ Todas las palabras recibidas. Generando tablero...");
+                startGameTimer(player); // Iniciar temporizador
 
-                // Generar tablero y mostrarlo
+                // Generar tablero
                 gameService.generateBoard(player);
                 String boardStr = gameService.getBoardAsString(player.getBoard());
-                sendMessage(player.getSession(), boardStr);
+                String wordsStr = String.join(",", player.getWords().stream()
+                        .map(Word::getText)
+                        .collect(Collectors.toList()));
 
+                sendMessage(player.getSession(), "BOARD:" + boardStr);
+                sendMessage(player.getSession(), "WORDS:" + wordsStr);
+                sendMessage(player.getSession(), "TIME:" + TIME_LIMIT_MINUTES); // Enviar límite de tiempo
             }
-        } else {
-            // ✅ Todas recibidas
-            gameService.generateBoard(player);
-            String boardStr = gameService.getBoardAsString(player.getBoard());
-            sendMessage(player.getSession(), boardStr);
         }
+    }
+
+    private void startGameTimer(Player player) {
+        scheduler.schedule(() -> {
+            if (players.containsKey(player.getName())) {
+                Session session = player.getSession();
+                try {
+                    sendMessage(session, "TIME_UP");
+                    sendMessage(session, "⌛ ¡Se acabó el tiempo! Juego terminado.");
+                    session.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Tiempo agotado"));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                players.remove(player.getName());
+            }
+        }, TIME_LIMIT_MINUTES, TimeUnit.MINUTES);
     }
 
 
